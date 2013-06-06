@@ -1,5 +1,6 @@
 \documentclass{article}
 \usepackage[english]{babel}
+\usepackage{amsmath}
 
 \title{Clustering big data}
 \author{Dan Filimon}
@@ -9,11 +10,140 @@
 
 \tableofcontents
 
+\pagebreak
+
 \section{Rationale}
+
+Telescopes surveying the Universe in search of exoplanets, DNA sequencers
+decoding our genes, governments monitoring cities, and people all over the
+world exchanging messages, images, videos produce across the Internet produce
+exabytes of data every day.
+
+Researchers, businesses and governments all over the world are trying to make
+sense of the ever-increasing collection of data they have access to.
+
+It needs to be stored, searched through, processed and analyzed to extract
+valuable information.
+Such a large volume of data comes with its own set of challenges and in the
+past few years, novel programming paradigms have emerged that make analyzing
+this data a lot more accessible.
+There are many systems that are designed to handle ``big data''. Out of these, the most famous one is MapReduce \cite{mr1} from Google, for batch
+processing and more recently Storm \cite{st1} originally from Backtype, now acquired by
+Twitter.
+
+Many applications that have previously been impossible are now a reality thanks
+to massive data sets. For example, quality statistical machine Translation can only
+work at very large scale. While the accuracy of currently available commerical
+fails to capture more subtle nuances, it is certainly good enough to convey the
+general meaning.
+
+Large scale data analysis is a broad field with many overlapping disciplines
+like machine learning, data mining, data science etc.
+
+Analyzing big data is challening. The complexity of many algorithms makes them
+difficult to parallelize and even when this is possible, because of the scale
+of the data, clusters of many machines are needed to process the data in
+reasonable time.
+
+The mainframe era of the 80s, displaced by the affordable
+personal computer is making a comeback under the guise of ``cloud computing''
+precisely because the complexity of maintaining a large enough cluster of machines
+to process ``big data'' makes it a ripe target for outsourcing.
+
+Companies now offer ``clouds'', clusters of virtual machines that support
+MapReduce style processing through open-source Hadoop distributions like Amazon
+(Amazon Web Services), Google (Google Compute Engine), Microsoft (Windows
+Azure) have vast data centers at their disposal and offer infrastructure as a
+service to be billed by the hour (or minute).
+
+Time is quite literally money in this market which makes fast processing even
+more critical. When processing data at terrabye scale and beyond especially in
+pipelines, the first priority is usually to reduce the data through some
+aggregation such that the resulting size is much smaller, for example storing
+statistics instead of the raw data.
+
+One of the most useful algorithms to analyze data with is clustering.
+Intuitively the aim of clustering is to find clumps of data that are more
+similar to one another than the others.
+
+The traditional use of clustering is for revealing interesting patterns in the
+data --- for example, if $n$ good quality clusters do form, this could mean there
+are $n$ types of users in the system.
+
+It's also especially useful for getting a good representative sample of the data
+that should behave similarly to the original distribution.
+This is important because sometimes there are no obvious ways of aggregating the 
+data being processed directly to reduce its size. If the data is clustered
+however, the resulting clusters' centroids can be used as input for the next
+stage of processing.
 
 \section{Clustering}
 
+There are many kinds of clustering which vary significantly in their approach
+in building the clusters. The kind of clustering we'll be discussing in this
+paper is ``centroid'' based.
+
+To apply any clustering, or machine learning for that matter, the data needs to
+be transformed from its raw representation to ``feature vectors''. The
+corresponding feature vector for a data item should capture plausibly relevant
+characteristics of the item in a numeric form.
+For example, when working with text documents, feature vectors containing
+frequencies a given word in a document compared to the corpus are useful.
+
+This paper doesn't attempt to further describe the various ways used to encode
+data into feature vectors or assess the usefulness of a subset of features.
+This is requires domain-specific knowledge and is the goal of feature engineering.
+We will assume the data is already available as feature vectors and will now
+formalize the clustering problem.
+
+We are given $n$ vectors (also referred to as a points) in $\textbf{R}^d$ and an
+integer $k$, and a distance measure, $dist$. We aim to group the $n$ points
+into $k$ disjoint sets $X_1$ through $X_k$. The mean of
+the points in cluster $i$ (or, disjoint set $X_i$) is called the ``centroid''
+of that cluster, which we call $c_i$.
+
+We want our clustering to be good in some sense, so we must define a measure of
+quality to optimize for. For this, we need a distance measure, $dist$, making the combined vector space and measure a metric space.
+
+We use $T_c$, the total cost of the clustering, which is the sum of the distances
+from each point to the centroid of the cluter it is assigned to. 
+
+\begin{eqnarray}
+    T_c = \sum_{i = 1}^{k} \left( \sum_{\bf x_{ij} \in X_i} dist({\bf x_{ij}},
+    {\bf c_i})
+    \right)
+\end{eqnarray}
+
+In this formulation, the number of clusters, $k$ is fixed, but this problem is
+related to the facility placement problem, which essentially identical except
+in that the number of cluster can vary.
+
+The main issue with this formulation is that the optimization problem we're
+trying to solve is NP-hard in the general case.
+This has the very important implication that it is infeasible to find an
+optimal solution to this problem. Any polynomial-time algorithm we can devise
+will at best be an approximation scheme.
+This turns out to not be as dire as it first sounds, because ``good enough'' is
+fine for virtually all applications and also because real data tends to have
+additional properties that results in stronger quality guarantees.
+
 \subsection{Quality}
+
+When it comes to the quality of the clusters generated by any algorithm, it is
+often said that ``clustering is in the eye of the beholder''.
+In unsupervised learning, which this problem is a part of, there is no
+known ``right answer''. Compare this with classification or regression where an
+example is either correctly clasified or predicted, or it isn't.
+
+Things are not so clear-cut in this case. While the total cost is certainly
+what we optimize for, multiple measure have been devised over the years that
+attempt to formalize the degree a clustering is ``good''.
+
+\subsubsection{Dunn Index}
+
+\subsubsection{Davies-Bouldin Index}
+
+\subsubsection{Adjusted Rand Index}
 
 \section{k-means}
 
@@ -87,4 +217,10 @@
 
 \section{Conclusion}
 
+
+%\begin{thebibliography}
+    %\bibitem Arthur, D., & Vassilvitskii, S. (2007). k-means++ : The Advantages of
+        %Careful Seeding. Proceedings of the eighteenth annual ACM- …, 8, 1–11.
+        %Retrieved from http://dl.acm.org/citation.cfm?id=1283383.1283494
+%\end{thebibliography}
 \end{document}
