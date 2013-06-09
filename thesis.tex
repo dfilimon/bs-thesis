@@ -3,7 +3,8 @@
 \usepackage{amsmath}
 \usepackage{graphicx}
 \usepackage{float}
-%\usepackage{lstlistings}
+%\usepackage{algorithmicx}
+\usepackage{algpseudocode}
 
 \title{Clustering big data}
 \author{Dan Filimon}
@@ -96,19 +97,19 @@ frequencies a given word in a document compared to the corpus are useful.
 This paper doesn't attempt to further describe the various ways used to encode
 data into feature vectors or assess the usefulness of a subset of features.
 This is requires domain-specific knowledge and is the goal of feature engineering.
-We will assume the data is already available as feature vectors and will now
-formalize the clustering problem.
+It's assumed the data is already available as feature vectors and so now
+the clustering problem can be formalized.
 
-We are given $n$ vectors (also referred to as a points) in $\textbf{R}^d$ and an
-integer $k$, and a distance measure, $dist$. We aim to group the $n$ points
+Given $n$ vectors (also referred to as a points) in $\textbf{R}^d$ and an
+integer $k$, and a distance measure, $dist$, group the $n$ points
 into $k$ disjoint sets $X_1$ through $X_k$. The mean of
 the points in cluster $i$ (or, disjoint set $X_i$) is called the ``centroid''
 of that cluster, which we call $c_i$.
 
-We want our clustering to be good in some sense, so we must define a measure of
-quality to optimize for. For this, we need a distance measure, $dist$, making the combined vector space and measure a metric space.
+The clustering needs to be good in some sense, so define a measure of
+quality to optimize for. For this, $dist$, a distance measure is needed, making the combined vector space and measure a metric space.
 
-We use $T_c$, the total cost of the clustering, which is the sum of the distances
+$T_c$, is what gets optimized for --- the total cost of the clustering, which is the sum of the distances
 from each point to the centroid of the cluter it is assigned to.
 
 \begin{eqnarray}
@@ -273,6 +274,9 @@ steps:
     \item assign each point to the cluster whose centroid is closest to it
     \item recompute the existing centroids
 \end{enumerate}
+The following 6 figures illustrates how this works in a toy example with 2D
+points we want to cluster into 3 clusters.
+
 \begin{figure}[H]
     \caption{These are some example points we'll cluster in 3 groups}
     \includegraphics[scale=0.4]{kmeans-points-pre.pdf}
@@ -309,18 +313,31 @@ steps:
 
 \subsection{Algorithm}
 
-The Python-style pseudocode for the algorithm described above is:
-\begin{verbatim}
-centroids = select k points from n
-while not done:
-    for p in points:
-        cmin = None
-        for c in centroids:
-            d = dist(p, c)
-            if d < dmin:
-                dmin = d
-                cmin = c
-\end{verbatim}
+The pseudocode for the algorithm described above is:
+
+\begin{algorithmic}[1]
+    \State $Centroids\gets select\; k\; points \in Points$
+    \While{not done}
+        \For{$c \in Centroids$}
+            \State $Clusters[c]\gets \emptyset$
+        \EndFor
+        \For{$p \in Points$}
+            \State $d_{min}\gets \infty$
+            \For{$c \in Centroids$}
+                \State $d\gets dist(p, c)$
+                \If{$d < d_{min}$}
+                    \State $d_{min}\gets d$
+                    \State $c_{min} \gets c$
+                \EndIf
+            \EndFor
+            \State $Clusters[c_{min}]\gets Clusters[c_{min}] \cup \{p\}$
+        \EndFor
+        \State $Centroids\gets \emptyset$
+        \For{$C \in Clusters$}
+            \State $Centroids\gets Centroids \cup \{mean(C)\}$
+        \EndFor
+    \EndWhile
+\end{algorithmic}
 
 The crucial details in the algorithm are:
 \begin{enumerate}
@@ -392,7 +409,7 @@ $\mathbf{c}_1 \ldots \mathbf{c}_i$. The new point is selected randomly with
 probability proportional to $\min_{j \in \left\{ 1 \ldots i \right\}}
 dist(\mathbf{x}, \mathbf{c}_j)$.
 
-\subsubsection{Convergence}
+\subsection{Convergence}
 
 As with most iterative machine learning algorithms, the main k-means step is
 performed multiple times. We stop the algorithm after:
@@ -403,9 +420,117 @@ performed multiple times. We stop the algorithm after:
     \item no points change cluster assignment
 \end{itemize}
 
-\subsubsection{Outliers}
+\subsection{Number of clusters}
 
-\subsubsection{Nearest neighbor search}
+Clustering is a very broad and somewhat loosely defined problem in general. In
+fact, \cite{why} jokingly remarks that ``clustering is in the eye of the
+beholder''.
+While we have formalized the problem in section 2, by explicitly stating that
+we are given $n$ $d$-dimensional points and the distance measure $dist$, we
+also assume to be given $k$.
+
+This might be true, but most of the time in practice it isn't. Typically
+however, this being an unsupervised learning problem, there is no ground truth.
+This implies that we can't know what the value of $k$ actually is, and
+sometimes we don't particularly care (notably, when using clustering to sample
+our original data set).
+One well known way of addressing this is the ``Elbow Method'', where one tries
+clustering the points with different values of $k$ and plots the total cost
+$T_c$ as a function of $k$. The total cost should go down as more clusters are
+available, because ``real'' clusters in the data have too few clusters to
+properly represent them, until after reaching this point, the cost plateaus
+because more clusters fit the real clusters exactly.
+
+\subsection{Outliers}
+
+Real data is often messy: it's put together from various data sources by (buggy)
+algorithms and (falible) humans and errors are likely. These errors look like
+outliers in the data where one of the dimensions is much different than the
+rest. In an unlucky case, these outliers migh even be fairly close together,
+warranting the question of whether they should be thought of as a cluster
+themeslves.
+
+In the figure below, suppose we're convinced that the 3 points at the bottom
+right are outliers and that there are only 2 clusters in the data.
+Then, the reasonable thing to do, is discard them and not have them be part of
+any cluster.
+
+\begin{figure}[H]
+    \caption{Data set where outliers have skewed the centroids}
+    \includegraphics[scale=0.7]{outliers.pdf}
+\end{figure}
+
+That's not possible with standard k-means as every point is part of exactly one
+cluster and contributes to that cluster's mean. This is why in the figure, the
+centroid of the cluster in the top-right is skewed downwards towards the three
+outliers at the bottom-right. The only thing to do here is to manually remove
+the outliers which is plausible for a small data set, but impossible for even a
+medium-sized one.
+
+The solution, lifted from \cite{Ostrovsky} modifies the centroid update
+operation. Instead of taking all the points assigned to a cluster into account
+when computing the new centroid, onle points that are within a ball (in the
+topological sense) are averaged.
+The radius of this ball is fraction (user-configurable in practice) of the
+smallest inter-cluster distance within the clustering. This ensures that only
+points close to the cluster's ``core'' play a role in the adjustment of its
+centroid.
+
+\subsection{Algorithm Complexity}
+
+A major consideration not treated up until now in this paper is the complexity of
+the algorithm. While the number of iterations is highly-dependent on the
+initial centroid seeding and the particular shape of the data, for a given
+k-means step, the two main operations take:
+\begin{enumerate}
+    \item point to cluster assignment: for each of the $n$ points, go through
+        all $k$ centroids and compute the distance between the $d$-dimensional
+        vectors. This step is therefore $O(n k d)$.
+    \item centroid adjustment: the points are partitioned across $k$ clusters,
+        but they are essentially summed up and divided by their count in each
+        cluster. Therefore, this step is $O(n d)$.
+\end{enumerate}
+
+So, for a given step, the total cost is $O(n k d + nd) = O(n k d)$. Each of
+these variables could conceivable be reduced.
+
+\begin{enumerate}
+    \item $n$: The data could be downsampled, thereby reducing
+        $n$.  Downsampling needs to take into account the particular distribution 
+        of the data and preserve it well-enough for
+        the final clustering. This is the route taken indirectly by the
+        streaming k-means approach described in section 9.
+    \item $d$: The vectors' dimensionality could be reduced through standard
+        techniques like Principal Component Analysis.
+    \item $k$: Searching for the nearest neighbor among all the centroids is
+        usually not a significant expense when $k$ is small. For most
+        ``classical'' clustering applications, $k$ is less than 100. However,
+        especially when using clustering as a way of approximating data, or
+        when dealing with web-scale data, $k$ can be much larger, potentially
+        on the order of millions. And even if it isn't, being a multiplicative
+        constant is reason enough to want to reduce it.
+        This can be achieved through approximate nearest-neighbor searches.
+\end{enumerate}
+
+\subsubsection{Approximate nearest-nerighbor search}
+
+There are many approaches to this problem, some of which are surveyed by Riegger
+in \cite{Riegger2010}.
+The one we chose is based on the Johnson-Lindenstrauss Lemma by W. Johnson and
+J. Lindenstrauss in \cite{jl}, for which an
+elementary proof is given by Dasgupta et. all in \cite{Dasgupta2003}. Citing
+directly from their abstract,
+
+\begin{quote}
+    A result of Johnson and Lindenstrauss shows that a set of $n$ points in
+    high dimensional Euclidean space can be mapped into an $O(\log
+    \frac{n}{\epsilon})$-dimensional Euclidean space such that the distance
+    between any two points changes by only a factor of $(1 \pm \epsilon)$.
+\end{quote}
+
+The mapping can be obtained by simply sampling $O(\log \frac{n}{\epsilon})$
+the components of $d$-dimensional vectors from $\mathcal{N}(0, 1)$ and then
+normalizing the results.
 
 \subsection{Ball k-means}
 
@@ -466,9 +591,25 @@ performed multiple times. We stop the algorithm after:
 \section{Conclusion}
 
 
-%\begin{thebibliography}
-    %\bibitem Arthur, D., & Vassilvitskii, S. (2007). k-means++ : The Advantages of
-        %Careful Seeding. Proceedings of the eighteenth annual ACM- …, 8, 1–11.
-        %Retrieved from http://dl.acm.org/citation.cfm?id=1283383.1283494
-%\end{thebibliography}
+\begin{thebibliography}{99}
+    \bibitem{Arthur2007} Arthur, D., \& Vassilvitskii, S. (2007). k-means++ : The Advantages of
+        Careful Seeding. Proceedings of the eighteenth annual ACM- …, 8, 1–11.
+        Retrieved from http://dl.acm.org/citation.cfm?id=1283383.1283494
+
+    \bibitem{Ostrovsky} Ostrovsky, R. (n.d.). The Effectiveness of Lloyd-type
+        Methods for the k-Means Problem, 1–18.
+
+    \bibitem{why} Why so many clustering algorithms? - A position paper SIGKDD
+        explorations, Vol. 4, No. 1. (June 2002), pp. 65-75 by Vladimir
+        Estivill-Castro
+
+    \bibitem{Indyk} Indyk, P., \& Motwani, R. (n.d.). Approximate Nearest Neighbors :
+        Towards Removing the Curse of Dimensionality, 604–613.
+
+    \bibitem{Riegger2010} Riegger, P. M. (2010). Literature Survey on Nearest Neighbor Search and Search in Graphs, (2300), 1–36.
+
+    \bibitem{jl} W. B. Johnson and J. Lindenstrauss, Extensions of Lipschitz maps into a Hilbert space, Contemp Math 26 (1984), 189–206.
+
+    \bibitem{Dasgupta2003} Dasgupta, S., \& Gupta, A. (2003). An elementary proof of a theorem of Johnson and Lindenstrauss. Random Structures and Algorithms, 22(1), 60–65. doi:10.1002/rsa.10073
+\end{thebibliography}
 \end{document}
