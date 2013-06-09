@@ -273,10 +273,6 @@ steps:
     \item assign each point to the cluster whose centroid is closest to it
     \item recompute the existing centroids
 \end{enumerate}
-Multiple iterations are performed until the maximum number of iterations is
-reached, until the quality plateaus or until no point changes cluster during
-the assignment phase.
-
 \begin{figure}[H]
     \caption{These are some example points we'll cluster in 3 groups}
     \includegraphics[scale=0.4]{kmeans-points-pre.pdf}
@@ -326,7 +322,7 @@ while not done:
                 cmin = c
 \end{verbatim}
 
-The crucial (unexplained) details are:
+The crucial details in the algorithm are:
 \begin{enumerate}
     \item centroid initialization: how are the $k$ points selected to become
         centroids at the beginning?
