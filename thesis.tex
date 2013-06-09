@@ -174,16 +174,90 @@ clusteirng algorithms. A widely used score for this is the Adjusted Rand Index
 based off the ``confusion matrix'' (same idea as with classification).
 
 \subsubsection{Dunn Index}
+The Dunn Index, was invented in 1974 by J. Dunn. A higher Dunn Index indicates
+a better clustering. It combines $\Delta_i$, a distance score for cluster $i$
+(called intracluster distance) and the distance between two clusters,
+$dist(\mathbf{c}_i, \mathbf{c}_j)$ (intercluster distance).
+
+$\Delta_i$ can have different expressions. For cluster $X_i$ it could be:
+\begin{itemize}
+    \item the maximum distance between any two points
+        \begin{eqnarray}
+            \Delta_i = \max_{\mathbf{x}, \mathbf{y} \in X_i} dist(\mathbf{x},
+            \mathbf{y}) \;\textrm{}
+        \end{eqnarray}
+    \item the mean distance between any two points
+        \begin{eqnarray}
+            \Delta_i = \frac{1}{|X_i| (|X_i| - 1)} \sum_{\mathbf{x}, \mathbf{y} \in
+            X_i, \mathbf{x} \ne \mathbf{y}} dist(\mathbf{x}, \mathbf{y})
+        \end{eqnarray}
+    \item the mean distance between any point and the centroid
+        \begin{eqnarray}
+            \Delta_i = \frac{\sum_{\mathbf{x} \in X_i} dist(\mathbf{x},
+            \mathbf{c}_i)}{|X_i|}
+        \end{eqnarray}
+    \item the median distance between any point and the centroid. This is the
+        one we use in the implementation. The reasoning is that the median is
+        much more roubst to outliers than the mean or max. Additionally,
+        computing distances between all pairs of points is simply not feasible
+        for large datasets.
+\end{itemize}
+
+Having defined $\Delta_i$, the Dunn Index is:
+
 \begin{eqnarray}
-    D = 0
+    D = \min_{1 \le i \le k} \left\{ \min_{1 \le j \le k, j \ne i} \left\{
+        \frac{dist(\mathbf{c}_i, \mathbf{c}_j)}{\max_{1 \le l \le k} \Delta_l}
+    \right\} \right\}
 \end{eqnarray}
 
 \subsubsection{Davies-Bouldin Index}
+The Davies-Bouldin Index was invented in 1979 by D. Davies and D. Bouldin. Like
+the Dunn Index, it is an internal evaluation scheme. A lower Davies-Bouldin
+Index indicates a better clustering.
+
+Defining a cluster-specific measure, exactly like for the Dunn Index,
+$\Delta_i$, the index is:
 \begin{eqnarray}
-    DB = 0
+    DB = \frac{1}{k} \sum_{i = 1}^k \max_{j \ne i} \left( \frac{\Delta_i +
+    \Delta_j}{dist(\mathbf{c}_i, \mathbf{c}_j)} \right)
 \end{eqnarray}
 
 \subsubsection{Adjusted Rand Index}
+The Rand Index was invented by W. Rand in 1971. It measures how similar two
+clusterings are to one another. When the index is adjusted for change grouping
+of elements it is known as the Adjusted Rand Index.
+
+To compute the index, one must first construct a contingency table (also known
+as a confusion matrix). Assuming the clusterings are $X = \{X_1, X_2, \ldots
+X_k\}$ and $Y = \{Y_1, Y_2, \ldots Y_k\}$, the overlap between cluster $i$ of
+$X$, and cluster $j$ of $Y$, $n_{ij}$ is the number of points that are closest
+to cluster $i$ in clustering $X$ and cluster $j$ in clustering $Y$. That is
+$n_{ij} = X_i \cap Y_j$.
+
+\begin{center}
+    \begin{tabular}{c | c  c  c  c | c}
+        & $Y_1$ & $Y_2$ & $\ldots$ & $Y_k$ & Sums \\
+        \hline
+        $X_1$ & $n_{11}$ & $n_{12}$ & $\ldots$ & $n_{1k}$ & $a_1$ \\
+        $X_2$ & $n_{21}$ & $n_{22}$ & $\ldots$ & $n_{2k}$ & $a_2$ \\
+        $\vdots$ & $\vdots$ & $\vdots$ & $\ddots$ & $\vdots$ & $\vdots$ \\
+        $X_k$ & $n_{k1}$ & $n_{k2}$ & $\ldots$ & $n_{kk}$ & $a_k$ \\
+        \hline
+        Sums & $b_1$ & $b_2$ & $\ldots$ & $b_k$ & \\
+    \end{tabular}
+\end{center}
+
+The Adjusted Rand Index is:
+
+\begin{eqnarray}
+    AR = \frac{\sum_{ij} \left( \frac{n_{ij}}{2} \right) - \left[\sum_i
+        \left( \frac{a_i}{2} \right) \sum_j \left( \frac{b_j}{2} \right)
+        \right]/\left( \frac{n}{2} \right)}{\frac{1}{2} \left[ \sum_i \left(
+            \frac{a_i}{2} \right) + \sum_j \left( \frac{b_j}{2} \right) \right] - \left[\sum_i
+        \left( \frac{a_i}{2} \right) \sum_j \left( \frac{b_j}{2} \right)
+        \right]/\left( \frac{n}{2} \right)}
+\end{eqnarray}
 
 \section{k-means}
 
@@ -323,6 +397,15 @@ probability proportional to $\min_{j \in \left\{ 1 \ldots i \right\}}
 dist(\mathbf{x}, \mathbf{c}_j)$.
 
 \subsubsection{Convergence}
+
+As with most iterative machine learning algorithms, the main k-means step is
+performed multiple times. We stop the algorithm after:
+\begin{itemize}
+    \item a fixed number of iterations, this is usually an upper bound
+    \item a quality metric plateaus (in this case, total cost), meaning that
+        it stops decreasing after a few iterations
+    \item no points change cluster assignment
+\end{itemize}
 
 \subsubsection{Outliers}
 
