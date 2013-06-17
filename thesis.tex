@@ -512,7 +512,7 @@ these variables could conceivable be reduced.
         This can be achieved through approximate nearest-neighbor searches.
 \end{enumerate}
 
-\subsubsection{Approximate nearest-nerighbor search}
+\subsubsection{Approximate nearest-neighbor search}
 
 There are many approaches to this problem, some of which are surveyed by Riegger
 in \cite{Riegger2010}.
@@ -528,11 +528,102 @@ directly from their abstract,
     between any two points changes by only a factor of $(1 \pm \epsilon)$.
 \end{quote}
 
-The mapping can be obtained by simply sampling $O(\log \frac{n}{\epsilon})$
-the components of $d$-dimensional vectors from $\mathcal{N}(0, 1)$ and then
-normalizing the results.
+The mapping can be obtained by simply sampling $d_r = O(\log \frac{n}{\epsilon})$
+$d$-dimensional random vectors from $\mathcal{N}(0, 1)$ and then
+normalizing each vector \cite{Dasgupta2003}.
 
-\subsection{Ball k-means}
+Arranging these $d_r$ vectors into a $d_r \times d$ sized
+projection matrix, $P$, multiplying $A$ by a $d$-dimensional vector
+$\mathbf{v}$ results in a $d_r$-dimensional vector, $P \mathbf{v}$.
+This is random-projection based dimensionality reduction.
+
+The main problem with nearest-neighbor searches is their inability to
+narrow-down the candidate set. On scalar data, the two main approaches for
+fast searching are based either on a total ordering of the elements and
+binary-search like approaches or a hashing function and use a hash-table.
+
+Vectors in $\mathbf{R}^d$ are not intuitively comparable, and defining an
+order of the dimensions doesn't work well. To see why, consider points
+$\mathbf{a, b, c} \in \mathbf{R}^d$ and the L1 norm of the difference of two
+vectors as the distance measure. If the order of the dimensions is from 1
+to $d$, the ordering of the vectors is equivalent to lexicographic. Suppose
+$\mathbf{b} = [b_1, \ldots, b_d]^T = [a_1 + \epsilon, \ldots, a_{d - 1} + \epsilon, a_d + \delta_b]^T$ and $\mathbf{c} = [c_1, \ldots, c_d]^T = [a_1 + 2 \epsilon, a_2, a_3 + \epsilon \ldots a_{d - 1} + \epsilon, a_d + \delta_c]$.
+Under the chosen distance measure, $||\mathbf{a} - \mathbf{b}||_1 = (d - 1)
+\epsilon + \delta_b$ and $||\mathbf{a} - \mathbf{c}||_1 = (d - 1) \epsilon +
+\delta_c$.
+In this case the first $d-1$ dimensions are not relevant to the comparison,
+yet, in under the ordering $\mathbf{b}$ would come before $\mathbf{c}$ and
+worse, according to the chosen distance measure $\mathbf{c}$ could even be closer to
+$\mathbf{a}$ (depending on $\delta_b$ compared to $\delta_c$).
+This shows that this type of ordering, doesn't guarantee the ordering of
+distances, making it useless for nearest-neighbor searches.
+
+Hashing a vector would result in a scalar that's close to uniformly distributed
+in some interval so that the resulting hash table is as close to balanced as
+possible. The issue here is that hashing two similar vectors with a typical
+good hashing function results in them being far away from each other.
+This makes trying out more than 1 candidate infeasible and therefore k-nearest
+neighbor searches impossible.
+
+Random projections offer a better approach. Consider figure 9, below.
+Call the line such a projection vector, $\mathbf{p}$. The line is the direction
+of the projection vector, not the vector per se (the vector is normalized to
+unit length). Each dot then, represents another vector in 2D space.
+Projecting a vector $\mathbf{a}$ on to another vector $\mathbf{p}$, visualized 
+here as projecting a point on to a line, results in a vector in the same
+direction as $\mathbf{p}$ and with magnitude $|\mathbf{a}| |\mathbf{p}| \cos \angle(\mathbf{a}, \mathbf{p})$.
+Since all the resulting vectors are in the same direction, just the magnitudes (that
+are scalar!) need to be compared.
+
+Note that vectors that are close in the original space, will result in comparable
+magnitudes. This is the very fact that enables the Johnson-Lindenstrauss lemma.
+However, vectors that are far away in the original space, could also map to similar
+magnitudes (like the top most 2 projections in figure 9). This means that
+closeness in the original space guranatees close scalars, but the converse is
+not true.
+There could even be points that are farther away from a point in the original space
+that project more closely to a it than points that are closer to the said point.
+
+This uncertainty gives rise to the approximate nature of the search. The
+closest neighbor is likely close by, but if the direction of the projection is
+particularly unlucky, it can be completely ignored in favor of points that are
+farther away.
+
+\begin{figure}[H]
+    \caption{An example of the resulting projections on to a random vector}
+    \includegraphics[scale=0.8]{proj.png}
+\end{figure}
+
+In fact the approximation becomes better as more directions are considered and the
+Johnson-Lindenstrauss lemma gives explicit bounds for the number of projections
+required for required given quality of the answer.
+
+In figure 10, even when using 1 projection, for low-dimensional spaces, the
+probability of finding the best neighbor directly is quite substantial.
+
+\begin{figure}[H]
+    \caption{}
+    \includegraphics[scale=0.7]{qualproj.png}
+\end{figure}
+
+For the closest $k$ neighbors the strategy now becomes selecting a ball of size $b$ around where
+the projected query is for each of the $p$ projections, merging all of these
+balls into a candidate set of size $2bp$ and searching in this new set.
+
+This new set only has $2bp$ points in it which should be a lot less than the
+original number of vectors to search through. The distance here are computed
+completely.
+The size of the ball, $b$ and the number of projections $p$ are the parameters.
+
+\begin{algorithmic}[1]
+    \State $Candidates \gets \emptyset$
+    \For{$\mathbf{p} \in$ $Projection$s}
+        \State $\mathbf{pq}\gets$ project query on to $\mathbf{p}$
+        \State $\mathbf{c}\gets$ closest neighbor of $\mathbf{pq}$ induced by $\mathbf{p}$
+        \State $Candidates\gets Candidates$ $\cup$ ball of size $b$ around $\mathbf{c}$
+    \EndFor
+    \State keep closest $k$ from $Candidates$ by computing the actual distances
+\end{algorithmic}
 
 \section{Large scale}
 
