@@ -5,6 +5,7 @@
 \usepackage{float}
 %\usepackage{algorithmicx}
 \usepackage{algpseudocode}
+\usepackage{url}
 
 \title{Clustering big data}
 \author{Dan Filimon}
@@ -32,7 +33,7 @@ Such a large volume of data comes with its own set of challenges and in the
 past few years, novel programming paradigms have emerged that make analyzing
 this data a lot more accessible.
 There are many systems that are designed to handle ``big data''. Out of these, the most famous one is MapReduce \cite{mr1} from Google, for batch
-processing and more recently Storm \cite{st1} originally from Backtype, now acquired by
+processing and more recently Storm \cite{storm} originally from Backtype, now acquired by
 Twitter.
 
 Many applications that have previously been impossible are now a reality thanks
@@ -496,7 +497,7 @@ these variables could conceivable be reduced.
 
 \begin{enumerate}
     \item $n$: The data could be downsampled, thereby reducing
-        $n$.  Downsampling needs to take into account the particular distribution 
+        $n$.  Downsampling needs to take into account the particular distribution
         of the data and preserve it well-enough for
         the final clustering. This is the route taken indirectly by the
         streaming k-means approach described in section 9.
@@ -569,7 +570,7 @@ Random projections offer a better approach. Consider figure 9, below.
 Call the line such a projection vector, $\mathbf{p}$. The line is the direction
 of the projection vector, not the vector per se (the vector is normalized to
 unit length). Each dot then, represents another vector in 2D space.
-Projecting a vector $\mathbf{a}$ on to another vector $\mathbf{p}$, visualized 
+Projecting a vector $\mathbf{a}$ on to another vector $\mathbf{p}$, visualized
 here as projecting a point on to a line, results in a vector in the same
 direction as $\mathbf{p}$ and with magnitude $|\mathbf{a}| |\mathbf{p}| \cos \angle(\mathbf{a}, \mathbf{p})$.
 Since all the resulting vectors are in the same direction, just the magnitudes (that
@@ -625,11 +626,67 @@ The size of the ball, $b$ and the number of projections $p$ are the parameters.
     \State keep closest $k$ from $Candidates$ by computing the actual distances
 \end{algorithmic}
 
+This approach is implemented as \texttt{ProjectionSearch} in Mahout.
+
 \section{Large scale}
+
+As widely explained in the rationale, large scale data processing is a
+requirement and clustering is a particularly useful application.
+There are multiple paradigms that are available, each suitable for particular
+kinds of problems.
+
+Processing large scale data is such an important problem that there are today
+many other technologies at Google and in the open-source ecosystem. There are
+multiple Hadoop distributions, like Mapr \cite{mapr} that provide complete many
+tools for both batch and online processing, NoSQL solutions, alternative
+distributed file systems, support for machine learning etc.
 
 \section{Batch processing: MapReduce}
 
+The most famous approach, popularized by Google's J. Dean and S. Ghemawat in
+\cite{mr1}, is MapReduce.
+MapReduce and its open-source Hadoop implementation, \cite{hadoop} are designed
+for \textit{batch data processing}. The idea is that there is a very large data set
+to process, that is stable (practically immutable).
+
+This data is typically stored on a distributed file system like Google File System
+\cite{gfs} or its open-source HDFS \cite{hdfs} equivalent.
+The most basic abstraction is the SSTable, or string-string table \cite{gfs}.
+It contains records that map serialized keys to values and is referred to in
+the Hadoop ecosystem as a SequenceFile.
+
+On top of these there can be a NoSQL database layer, like Google BigTable \cite{bt}
+or the equivalent HBase \cite{hbase}. The database layer offers some structure
+to the data in the form of a multi-dimensional map \cite{bt}, section 2.
+
+The best explanation on MapReduce is the original paper \cite{mr1} and readers
+unfamiliar with MapReduce are referred to it. A basic understanding of the
+paradigm is assumed in the rest of this work.
+
 \section{Online processing: Storm}
+
+For particular applications, where there is a continous stream
+of data that needs to be processed, collecting the data in batches and
+processing it with Hadoop is challenging.
+Take Twitter as an example. This widely-used social network with its condensed
+140-character messages, and notably hashtags is a great way of understanding
+trends. Some of these trends are responses to real-world events, like the 2012
+US Presidential Election while some are spontaneous and transient.
+
+Batch processing would fail to discern all but the longest-running
+trends. Twitter's Storm is open-source and designed for online processing.
+The code and a fairly complete Wiki are avaiable on github \cite{storm}.
+
+In this approach, the stream of data is analyzed immediately as it becomes
+available. In Storm lingo, there are:
+\begin{itemize}
+    \item Streams
+    \item Tuples
+    \item Spouts
+    \item Bolts
+\end{itemize}
+
+This system
 
 \section{k-means as a MapReduce}
 
@@ -702,5 +759,47 @@ The size of the ball, $b$ and the number of projections $p$ are the parameters.
     \bibitem{jl} W. B. Johnson and J. Lindenstrauss, Extensions of Lipschitz maps into a Hilbert space, Contemp Math 26 (1984), 189–206.
 
     \bibitem{Dasgupta2003} Dasgupta, S., \& Gupta, A. (2003). An elementary proof of a theorem of Johnson and Lindenstrauss. Random Structures and Algorithms, 22(1), 60–65. doi:10.1002/rsa.10073
+
+    \bibitem{mr1} Dean, J., \& Ghemawat, S. (2004). MapReduce: simplified data
+        processing on large clusters. Communications of the ACM, 137–149.
+        Retrieved from http://dl.acm.org/citation.cfm?id=1327492
+
+    \bibitem{hadoop} Hadoop.apache.org
+        Welcome to Apache™ Hadoop®!
+        Hadoop.apache.org (2011). Welcome to Apache™ Hadoop®!. [online]
+        Retrieved from: \url{http://hadoop.apache.org/} [Accessed: 18 Jun 2013].
+
+    \bibitem{gfs} Ghemawat, S., Gobioff, H., \& Leung, S. (2003). The Google
+        file system. ACM SIGOPS Operating Systems …, 37(5), 29.
+        doi:10.1145/1165389.945450
+
+    \bibitem{hdfs} Hadoop.apache.org
+        HDFS Architecture Guide
+        Hadoop.apache.org (2008). HDFS Architecture Guide. [online] Retrieved
+        from: \url{http://hadoop.apache.org/docs/stable/hdfs_design.html} [Accessed:
+        18 Jun 2013].
+
+    \bibitem{bt} Chang, F., Dean, J., \& Ghemawat, S. (2008). Bigtable: A
+        distributed storage system for structured data. ACM Transactions on ….
+        Retrieved from http://dl.acm.org/citation.cfm?id=1365816
+
+    \bibitem{hbase} Hbase.apache.org
+        HBase - Apache HBase Home
+        Hbase.apache.org (2013). HBase - Apache HBase Home. [online]
+        Retrieved from: \url{http://hbase.apache.org/} [Accessed: 18 Jun 2013].
+
+    \bibitem{mapr} Mapr.com
+        Apache Hadoop Solutions For Big Data | MapR
+        Mapr.com. Apache Hadoop Solutions For Big Data | MapR. [online]
+        Retrieved from: \url{http://www.mapr.com/} [Accessed: 18 Jun 2013].
+
+    \bibitem{storm} Nathanmarz, N.
+        storm
+        Nathanmarz, N. (2013). storm. [online] Retrieved from:
+        \url{https://github.com/nathanmarz/storm} [Accessed: 18 Jun 2013].
+
+    \bibitem{flume} Chambers, C., Raniwala, A., Perry, F., Adams, S., Henry, R.
+        R., Bradshaw, R., \& Weizenbaum, N. (n.d.). FlumeJava : Easy , Efficient
+        Data-Parallel Pipelines, 363–375.
 \end{thebibliography}
 \end{document}
