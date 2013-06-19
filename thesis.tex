@@ -680,23 +680,87 @@ The code and a fairly complete Wiki are avaiable on github \cite{storm}.
 In this approach, the stream of data is analyzed immediately as it becomes
 available. In Storm lingo, there are:
 \begin{itemize}
-    \item Streams
-    \item Tuples
-    \item Spouts
-    \item Bolts
+    \item Topology: the DAG of nodes used for processing data in Storm. A
+        topology is designed for each type of problem to be solved.
+    \item Tuples: fundamental unit of data that gets passed around through the
+        topology.
+    \item Streams: series of tuples (potentially infinite) that are processed.
+    \item Spouts: sources of streams. This is how data comes in from the
+        outside in a Storm system.
+    \item Bolts: processing nodes, where various kinds of operations are
+        applied to tuples.
 \end{itemize}
 
-This system
+While Storm is said to be fault-tolerant \cite{storm}, what this really means
+is that if nodes in the topology fail, they will be restarted. For this reason,
+the operations that are well suited to tuples are stateless.
+Of course, certain bolts will need to maintain state, if at least for the
+aggregate statistics that need to be computed. This is left in the hands of the
+developer and can be implemented as periodic writes to disk of the bolt's
+state.
+Storm provides \textit{at least once} guarantees for each processed tuple. So,
+each tuple is guaranteed to be proceseed. However in the event of a failure,
+the tuple might be sent through the topology again.
+
+Trident \cite{storm} is a higher-level abstraction on top of Storm. It works
+with concepts like tuple filtering and aggregation which make the system feel
+more functional, but the key addition is the grouping of the stream in batches.
+These batches are designed to work as atomic units of computation, the output
+of a pipeline often ending as a bulk insert into a database.
+Moreover the batches provide \textit{exactly once} semantics. This is done by
+assigning each batch a transaction ID and applying state updates on a batch
+only after the previous batch is fully processed.
+Interested readers are encouraged to read the full Storm and Trident
+documentation at \cite{storm}.
+
+As an interesting note, this system is reminiscent of FlumeJava \cite{flume}, 
+a higher-level system for implementing MapReduce pipelines developed by Google
+that also behaves like a Trident-like topology. The main difference is that
+Trident is designed for online processing, not complex batch pipelines.
 
 \section{k-means as a MapReduce}
 
+As k-means cannot be expressed as an online algorithm (it simply needs all the
+points right from the start), the typical large scale implementation uses
+MapReduce.
+
 \subsection{Algorithm}
+
+To get a sense of how k-means would work in this setting, let's revisit the
+pseudocode in section 3.1:
+
+\begin{algorithmic}[1]
+    \State $Centroids\gets select\; k\; points \in Points$
+    \While{not done}
+        \For{$c \in Centroids$}
+            \State $Clusters[c]\gets \emptyset$
+        \EndFor
+        \For{$p \in Points$}
+            \State $d_{min}\gets \infty$
+            \For{$c \in Centroids$}
+                \State $d\gets dist(p, c)$
+                \If{$d < d_{min}$}
+                    \State $d_{min}\gets d$
+                    \State $c_{min} \gets c$
+                \EndIf
+            \EndFor
+            \State $Clusters[c_{min}]\gets Clusters[c_{min}] \cup \{p\}$
+        \EndFor
+        \State $Centroids\gets \emptyset$
+        \For{$C \in Clusters$}
+            \State $Centroids\gets Centroids \cup \{mean(C)\}$
+        \EndFor
+    \EndWhile
+\end{algorithmic}
+
+The first question that arises comes from the sampling at line 1. In a typical
 
 \subsection{Discussion}
 
 \subsubsection{Multiple passes through the data}
 
 \subsubsection{Random initialization}
+
 
 \section{Making big data small}
 
