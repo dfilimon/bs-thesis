@@ -82,6 +82,14 @@ data being processed directly to reduce its size. If the data is clustered
 however, the resulting clusters' centroids can be used as input for the next
 stage of processing.
 
+\section{Apache Mahout}
+
+This work focuses on Apache Mahout \cite{mahout}, an open-source scalable
+machine learning library written on top of Hadoop \cite{hadoop}.
+The work I have done is implementing the algorithms described and committing
+them in Mahout (becoming a committer in the process) where they will be part of
+release 0.8. The actual code will be described in a later section.
+
 \section{Clustering}
 
 There are many kinds of clustering which vary significantly in their approach
@@ -753,16 +761,97 @@ pseudocode in section 3.1:
     \EndWhile
 \end{algorithmic}
 
-The first question that arises comes from the sampling at line 1. In a typical
+The first question that arises comes from the sampling at line 1. $k$ centroids
+have to be selected (without replacement) from the $n$ points with equal
+proability in the simplest case. This is easy to do in memory, but for
+on-disk data, this is nontrivial.
+Simply adapting the algorithm for in memory sampling is infeasible because it
+would require (efficient) constant time access to anywhere on disk.
+
+The solution is using a \textit{reservoir sampling} algorithm, designed to
+sample points from a stream with equal probability. J. Vitter introduces a
+family of such algorithms in \cite{reservoir} and compares their performance.
+For a more informal introduction see this blog post by G. Grothaus
+\cite{grothaus}.
+Such algorithms work by passing through the data just once. This is the
+approach Mahout takes.
+
+In the main part of the algorithm, the \textit{k-means step} is executed
+multiple times until convergence:
+\begin{enumerate}
+    \item Assign each point to its closest cluster;
+    \item Adjust all the centroids.
+\end{enumerate}
+
+Ideally, we'd like to parallelize the outer loop among the mappers and
+reducers. However, this is impossible because of the intrisinc data dependency
+in the algorithm. Step $i$ cannot start without having the data from step $i -
+1$.
+
+Looking inside the loop, the k-means step is neatly divided into two
+substeps, as described above. These can be exactly mapped to the mappers and
+reducers. A very high level description is:
+\\
+\begin{algorithmic}[1]
+    \State Sample $k$ centroids from the $n$ points using Reservoir Sampling
+    \While{not done}
+        \State Split the $n$ points across the mappers and for each split,
+        assign the points to the $k$ centroids (computing partial sums)
+        \State Aggregate the partial sums from the $k$ centroids from every
+        mapper into final sums and divide by the number of points per cluster
+    \EndWhile
+\end{algorithmic}
 
 \subsection{Discussion}
+This approach is implemented in most of Mahout's clustering algorithms, through
+a sophisticated and pluggable framework for cluster classification (first step,
+also given a Bayesian treatment) and various iteration policies (as a MapReduce
+or in memory). The stop condition is the plateauing of the total cost $T_c$.
 
 \subsubsection{Multiple passes through the data}
+One unfortunate consequence of the iterative nature of k-means is that for $r$
+iterations, there will be $r + 1$ passes through the data (the 1 extra pass
+accounts for the centroid sampling).
+Sampling the data is not trivial and not parallelizable!
+Furthermore, the $r$ iterations are actual MapReduce jobs, incurring the
+penalty of setting up the nodes, moving data through the cluster, etc.
 
 \subsubsection{Random initialization}
+Even more worryingly, the random sampling performed at the beginning wouldn't
+support the significantly better k-means++ initialization.
 
+While there is more recent work by P. Efraimidis \cite{efraimidis} for
+an algorithm that works with weighted random sampling, it's not clear how this
+would work for the dynamically adjustable weights required for k-means++ (my
+guess is that it would not).
+
+The issue with random initialization is that the selected centroids may be
+paritcularly unlucky, taking many iterations to converge or even failing
+entirely by selecting two points in the same cluster.
+
+Not only that but the typical solution of multiple random restarts in
+unfeasible since it requires generating a completely new random sample of
+centroids and another set of iterations. If the k-means clustering job takes a
+few hours (easily seen on experimental test sets), getting a good clustering on
+data would not be practical.
+
+\subsection{Fast nearest neighbor search}
+Mahout's k-means also doesn't support fast nearest neighbor searching. This
+isn't a real theoretical limitation as support for this could easily be added.
 
 \section{Making big data small}
+
+The k-means as a MapReduce approach described earlier works, but it seems to be
+a dead end as far as improvement are concerned.
+A totally different approach, widely used when working with big data is
+this:
+\begin{enumerate}
+    \item Have the data on disk;
+    \item Construct a sketch of the data that can fit into memory;
+    \item Apply more sophisticated algorithms on the sketch;
+    \item See if the results are good for the full data set and maybe adjust
+        the solution accordingly.
+\end{enumerate}
 
 \section{Streaming k-means}
 
@@ -804,6 +893,12 @@ The first question that arises comes from the sampling at line 1. In a typical
 
 
 \begin{thebibliography}{99}
+    \bibitem{mahout} Mahout.apache.org
+        Apache Mahout: Scalable machine learning and data mining
+        Mahout.apache.org (2012). Apache Mahout: Scalable machine learning and
+        data mining. [online] Retrieved from: \url{http://mahout.apache.org/}
+        [Accessed: 20 Jun 2013].
+
     \bibitem{Arthur2007} Arthur, D., \& Vassilvitskii, S. (2007). k-means++ : The Advantages of
         Careful Seeding. Proceedings of the eighteenth annual ACM- …, 8, 1–11.
         Retrieved from http://dl.acm.org/citation.cfm?id=1283383.1283494
@@ -865,5 +960,20 @@ The first question that arises comes from the sampling at line 1. In a typical
     \bibitem{flume} Chambers, C., Raniwala, A., Perry, F., Adams, S., Henry, R.
         R., Bradshaw, R., \& Weizenbaum, N. (n.d.). FlumeJava : Easy , Efficient
         Data-Parallel Pipelines, 363–375.
+
+    \bibitem{reservoir} Vitter, J. S. (1985). Random sampling with a reservoir.
+        ACM Transactions on Mathematical Software, 11(1), 37–57.
+        doi:10.1145/3147.3165
+
+    \bibitem{grothaus} Grothaus, G.
+        Gregable: Reservoir Sampling - Sampling from a stream of elements
+        Grothaus, G. (2007). Gregable: Reservoir Sampling - Sampling from a
+        stream of elements. [online] Retrieved from:
+        \url{http://gregable.com/2007/10/reservoir-sampling.html} [Accessed: 20 Jun
+        2013]
+
+    \bibitem{efraimidis} Efraimidis, P. (2010). Weighted Random Sampling over
+        Data Streams. arXiv preprint arXiv:1012.0256. Retrieved from
+        \url{http://arxiv.org/abs/1012.0256}
 \end{thebibliography}
 \end{document}
