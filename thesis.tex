@@ -649,7 +649,7 @@ multiple Hadoop distributions, like Mapr \cite{mapr} that provide complete many
 tools for both batch and online processing, NoSQL solutions, alternative
 distributed file systems, support for machine learning etc.
 
-\section{Batch processing: MapReduce}
+\subsection{Batch processing: MapReduce}
 
 The most famous approach, popularized by Google's J. Dean and S. Ghemawat in
 \cite{mr1}, is MapReduce.
@@ -671,7 +671,7 @@ The best explanation on MapReduce is the original paper \cite{mr1} and readers
 unfamiliar with MapReduce are referred to it. A basic understanding of the
 paradigm is assumed in the rest of this work.
 
-\section{Online processing: Storm}
+\subsection{Online processing: Storm}
 
 For particular applications, where there is a continous stream
 of data that needs to be processed, collecting the data in batches and
@@ -835,7 +835,7 @@ centroids and another set of iterations. If the k-means clustering job takes a
 few hours (easily seen on experimental test sets), getting a good clustering on
 data would not be practical.
 
-\subsection{Fast nearest neighbor search}
+\subsubsection{Fast nearest neighbor search}
 Mahout's k-means also doesn't support fast nearest neighbor searching. This
 isn't a real theoretical limitation as support for this could easily be added.
 
@@ -855,19 +855,160 @@ this:
 
 \section{Streaming k-means}
 
+In the streaming setting, the data comes in one point at a time and storing all
+of the incoming points in memory in infeasible. Algorithms for this setting
+also exist, notably the work by Ailon et al. in \cite{skm1}.
+An improvement of the work in \cite{skm1} is given by Shindler et al in
+\cite{fastskm}. This last paper is the source of the Mahout
+\texttt{StreamingKMeans} implementation.
+
+In \cite{fastskm} the number of clusters to generate is not fixed as $k$ as in
+standard k-mans, but allowed to vary and is on the order of $O(k \log n)$. This
+makes maintaining the invariant a lot easier.
+
+After all the points in the stream have been processed, the resulting centroids
+are treatead as a sketch of the original data. This means that each
+intermediate centroid is a \textit{weighted representative} for the points that
+were assigned to its cluster by the streaming k-means pass.
+These weighted points are then clustered in-memory using a traditional ball
+k-means approach.
+
 \subsection{Algorithm}
 
+The pseudocode for the streaming k-means algorithm described in
+\cite{fastskm} and implemented in Mahout is given below. The notable parameters
+in the algorithm are $\delta$, the distance cutoff, which intuitively
+corresponds to the maximum distance there can be between a point and the
+centroid that it's closest to for it to be assimilated. $\beta$ is the base of
+the exponential function that drives the increases in distance cutoff before
+each collapse. It is what insures that collapses will be relatively infrequent.
+
+\begin{algorithmic}[1]
+    \For{each point $p$ with weight $w$}
+        \State Find the closest centroid $c$ to $p$ and let $d = dist(c, p)$
+        \If{even with probability proportional to $d \times w / \delta$
+        occurs}
+            \State create a new cluster with $p$ as its centroid
+        \Else
+            \State merge $p$ with $c$ updating $c$
+        \EndIf
+        \If {there are more than $O(k \log n)$ clusters}
+            \State $\delta \gets \beta \times \delta$
+            \State collapse the clusters recursively
+        \EndIf
+    \EndFor
+\end{algorithmic}
+
 \subsection{Discussion}
+This streaming k-means approach produces a sketch that is provably good-enough
+for a k-means clustering  \cite{skm1, fastskm}. Furthermore, given the
+goal is to create a sketch, approximate versions of nearest-neighbor
+search are appropriate.
+
+The resulting clustering can be used directly (i.e. for radial basis functions)
+or another ball k-means pass can collapse the centroids down to $k$. The
+important observation here is that the approximation of size $k \log n << n$.
+For this reason, the resulting data can fit into memory and all the known
+k-means tricks are applicable. k-means++ initialization, multiple restarts and
+outlier elimination are all possible.
+
+Therefore the quality of the resulting clustering will be close to that produce
+by k-means, but with only one (for the most part) pass through the data.
 
 \section{Clustering big data: MapReduce}
 
+This approach is even more valuable in a MapReduce implementation. Multiple
+mappers can produce independent sketches of their chunk of the data set that
+can be merged together as a final set of points.
+
+The mappers will actually
+overestimate how many centoids are produced. This is because for $m$ mappers
+and $n$ points, assuming a uniform split, $n / m$ points are to be processed
+per mapper, resulting in on the order of $k \log (n / m)$ centroids per mapper
+for a total of $m k \log (n \ m) > k \log n$ and the number of centroids
+produced increases linearly with the number of mappers. This issue cannot be
+addressed as it stems from the guarantees provided by each mapper.
+Fundamentally this means that in large clusters with many mappers and for jobs
+where the number of clusters is on the order of the number of points, this
+approach is impractical as it risks producing even more points than the
+original $n$. For those cases, different approaches are more appropriate.
+
+Another issue coming from the need for a final ball k-means pass is that of the
+reduce which must cluster all of the intermediate points. This means that there
+can be just 1 reducer and that the points from the mappers must fit into
+memory. This can be remedied by adding another streaming k-means pass in the
+reducer before the final ball k-means to ensure that the data will fit into
+memory.
+
 \subsection{Mahout implementation}
+
+All of the approaches detailed above have been implemented as part of this
+project in Mahout. The algorithms are now merged into upstream and will be part
+of the upcoming (as of June 2013) release 0.8.
+
+The main contributions are:
+\begin{enumerate}
+    \item \texttt{Searcher} \& friends: classes and interface that support fast
+        approximate nearest-neighbor search. The most notable implementation
+        are \\ \texttt{FastProjectionSearch} and
+        \texttt{LocalitySensitiveHashSearch}.
+    \item \texttt{BallKMeans}: implements a classic non MapReduce k-means
+        algorithm supporting k-means++ initialization, multiple restarts with
+        cost evaluations and ball k-means.
+    \item \texttt{StreamingKMeans} \& MapReduce classes: the
+        \texttt{StreamingKMeans} implements the streaming k-means algorithm
+        described above while \\ \texttt{StreamingKMeansMapper},
+        \texttt{StreamingKMeansReducer} and some auxiliary classes implement
+        the Hadoop job.
+    \item Various other tools for re-splitting Hadoop SequenceFiles, running
+        experiments and measuring cluster qualtiy.
+\end{enumerate}
 
 \section{Clustering big data: Storm}
 
+Storm as outlined above is quite a different paradigm, that's particularly
+suitable for on-line algorithms like streaming k-means. Since the main focus of
+this work has been Mahout and implictly Hadoop, the Storm implementation is
+only a prototype, that serves to highlight how easily \texttt{StreamingKMeans}
+code can be integrated into useful applications.
+
 \subsection{Storm prototype}
 
+First of all, since the focus of Storm is online processing of streams, talking
+about batch k-means is unhelpful. As a motivating application, consider anomaly
+detection. The data could be clustered as it comes in, point by point or by
+only selecting points ocasionally. The clusters that would result from these
+two approaches should remain the same over a period of time provided the data
+doesn't change. If however, points start coming in whose distance to the
+existing clusters is unexpectedly high making some of the quality metrics
+change, this indicates that something new is happening and is grouds for
+triggering an alarm.
+
+A prototype implementation (without the practical application outlined above)
+is available at \cite{ss}. This implementation provides a
+\texttt{StreamingKMeansBolt} as well as a \texttt{StreamingKMeansAggregator}.
+The way streaming k-means clustering works on top of Storm is this:
+\begin{enumerate}
+    \item Tuples contain the Vectors that will be clustered.
+    \item They are clustered directly with \texttt{StreamingKMeans.cluster()}
+        as soon as they come in through the regular stream. What results is a
+        continously improving approximation of the input distribution.
+    \item Periodically (this being implemented in the currenty prototype
+        through Storm \texttt{tick tuples}, tuples that are sent through a
+        special stream by the system to every node), the bolt will emit its
+        current approximation for further processing.
+\end{enumerate}
+
 \section{Results}
+
+Now that the approaches and contributions have been adequately presented, it is
+time for concrete results. First, in terms of expectations, we expect the
+streaming k-means \& ball k-means system to perform thusly compared to the
+existing k-means:
+\begin{enumerate}
+    \item Qualtiy
+    \item Speed
+\end{enumerate}
 
 \subsection{Quality}
 
@@ -888,6 +1029,7 @@ this:
 \subsubsection{Experiment}
 
 \subsubsection{Discussion}
+
 
 \section{Conclusion}
 
@@ -975,5 +1117,17 @@ this:
     \bibitem{efraimidis} Efraimidis, P. (2010). Weighted Random Sampling over
         Data Streams. arXiv preprint arXiv:1012.0256. Retrieved from
         \url{http://arxiv.org/abs/1012.0256}
+
+    \bibitem{skm1} Ailon, N., Jaiswal, R., \& Monteleoni, C. (2009). Streaming
+        k-means approximation. Advances in Neural Information …, 1–9. Retrieved
+        from \url{http://www1.cs.columbia.edu/~rjaiswal/ajmNIPS09.pdf}
+
+    \bibitem{fastskm} Shindler, M. (2011). Fast and accurate k-means for large
+        datasets. Advances in Neural …. Retrieved from
+        \url{http://onlinelibrary.wiley.com/doi/10.1002/cbdv.200490137/abstract}
+
+    \bibitem{ss} Dfilimon, D.  streaming-storm
+        Dfilimon, D. (2013). streaming-storm. [online] Retrieved from:
+        \url{https://github.com/dfilimon/streaming-storm} [Accessed: 24 Jun 2013].
 \end{thebibliography}
 \end{document}
